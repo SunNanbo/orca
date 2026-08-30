@@ -148,7 +148,7 @@ class IndexedOpenFileLookup {
       const identity = pathIdentity(file.filePath, allowAliases)
       const indexedFile = { file, index, identity }
       this.indexedOpenFiles.set(file.id, indexedFile)
-      addToListMap(this.directEditors, file.filePath, indexedFile)
+      addToListMap(this.directEditors, identity.normalizedPath, indexedFile)
       if (allowAliases) {
         addToListMap(this.aliasEditors, identity.aliasComparisonPath, indexedFile)
         if (identity.isWslUnc) {
@@ -166,7 +166,7 @@ class IndexedOpenFileLookup {
         ? (this.aliasEditors.get(change.identity.aliasComparisonPath) ?? [])
         : (this.wslAliasEditors.get(change.identity.aliasComparisonPath) ?? [])
     return collectMatchingFiles(
-      this.directEditors.get(change.absolutePath) ?? [],
+      this.directEditors.get(change.identity.normalizedPath) ?? [],
       aliases,
       this.diffsByRelativePath.get(change.relativePath) ?? []
     )
