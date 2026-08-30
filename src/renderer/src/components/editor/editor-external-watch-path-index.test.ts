@@ -22,6 +22,25 @@ function file(overrides: Partial<OpenFile> & Pick<OpenFile, 'id' | 'filePath'>):
 }
 
 describe('editor external watch path batch index', () => {
+  it('normalizes direct Windows editor paths without WSL alias matching', () => {
+    const edit = file({ id: 'windows-edit', filePath: 'C:\\Repo\\File.ts' })
+    const index = indexEditorExternalWatchBatchPaths(
+      {
+        worktreePath: 'c:/repo',
+        events: [{ kind: 'update', absolutePath: 'c:/repo/file.ts' }]
+      },
+      [edit],
+      {
+        ...wslScope,
+        worktreePath: 'c:/repo',
+        allowLocalWindowsWslAliases: undefined
+      }
+    )
+
+    expect(index.changes).toHaveLength(1)
+    expect(index.matchingOpenFiles(index.changes[0])).toEqual([edit])
+  })
+
   it('matches UNC aliases for updates, deletes, and restored tombstones', () => {
     const restored = file({
       id: 'restored',
