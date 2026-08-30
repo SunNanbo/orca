@@ -151,6 +151,30 @@ describe('editor external watch path batch index', () => {
     expect(index.matchingOpenFiles(index.changes[0]).map(({ id }) => id)).toEqual(['diff', 'edit'])
   })
 
+  it('matches Windows editor paths when watcher casing differs below the worktree root', () => {
+    const markdown = file({
+      id: 'markdown',
+      filePath: 'C:\\Users\\Alice\\Repo\\Notes\\Test.md',
+      relativePath: 'Notes/Test.md',
+      language: 'markdown'
+    })
+    const index = indexEditorExternalWatchBatchPaths(
+      {
+        worktreePath: 'c:/users/alice/repo',
+        events: [{ kind: 'update', absolutePath: 'c:/users/alice/repo/notes/test.md' }]
+      },
+      [markdown],
+      {
+        worktreeId: 'wt-wsl',
+        worktreePath: 'C:\\Users\\Alice\\Repo',
+        runtimeEnvironmentId: null
+      }
+    )
+
+    expect(index.changes).toHaveLength(1)
+    expect(index.matchingOpenFiles(index.changes[0])).toEqual([markdown])
+  })
+
   it('deduplicates repeated events and detects only working-tree combined diffs', () => {
     const index = indexEditorExternalWatchBatchPaths(
       {
