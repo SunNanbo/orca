@@ -900,6 +900,13 @@ jobs:
       - name: Smoke packaged CLI
         run: node config/scripts/smoke-packaged-cli.mjs --app-dir=dist/win-unpacked
 
+      - name: Upload Windows PR build
+        uses: actions/upload-artifact@v4
+        with:
+          name: orca-pr-${{ github.event.pull_request.number }}-windows-unpacked
+          path: dist/win-unpacked/
+          retention-days: 7
+
   e2e:
     name: e2e
     needs: code_paths
