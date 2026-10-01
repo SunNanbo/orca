@@ -460,6 +460,46 @@ describe('createExternalWatchEventHandler tombstone coalescing', () => {
     dispose()
   })
 
+  it('reloads tabs in every workspace that shares the watched folder path', () => {
+    const fileInWorkspaceA = { ...fileNotes, id: 'notes-a', worktreeId: 'wt-a' }
+    const fileInWorkspaceB = { ...fileNotes, id: 'notes-b', worktreeId: 'wt-b' }
+    vi.mocked(useAppStore.getState).mockReturnValue({
+      openFiles: [fileInWorkspaceA, fileInWorkspaceB],
+      setExternalMutation
+    } as never)
+    const dispatchEvent = vi.fn()
+    vi.stubGlobal('window', { dispatchEvent })
+    const sharedFolderTarget = (worktreeId: string) => ({
+      worktreeId,
+      worktreePath: '/repo',
+      connectionId: undefined,
+      runtimeEnvironmentId: null
+    })
+    const { handleFsChanged, dispose } = createExternalWatchEventHandler(() => [
+      sharedFolderTarget('wt-a'),
+      sharedFolderTarget('wt-b')
+    ])
+
+    handleFsChanged(payload([{ kind: 'update', absolutePath: '/repo/notes.md' }]))
+    vi.advanceTimersByTime(100)
+
+    expect(notifyEditorExternalFileChange).toHaveBeenCalledWith({
+      worktreeId: 'wt-a',
+      worktreePath: '/repo',
+      relativePath: 'notes.md',
+      runtimeEnvironmentId: null
+    })
+    expect(notifyEditorExternalFileChange).toHaveBeenCalledWith({
+      worktreeId: 'wt-b',
+      worktreePath: '/repo',
+      relativePath: 'notes.md',
+      runtimeEnvironmentId: null
+    })
+    // Why: Explorer/Source Control consume the path-scoped event, so fan-out must not duplicate it.
+    expect(dispatchEvent).toHaveBeenCalledTimes(1)
+    dispose()
+  })
+
   it('reloads a combined Changes tab even though no single-file tab matches', () => {
     const combinedDiffTab = {
       id: 'wt-1::all-diffs::uncommitted',
