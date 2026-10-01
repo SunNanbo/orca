@@ -39,10 +39,11 @@ type PendingDeleteTimer = {
 }
 
 export function buildEditorExternalWatchEventHandler(
-  findTarget: (
+  // Why: several folder workspaces can share one path, and fs:changed carries only the path, so a lookup may resolve to many owners.
+  findTargets: (
     worktreePath: string,
     runtimeEnvironmentId: string | null
-  ) => EditorExternalWatchTarget | undefined
+  ) => EditorExternalWatchTarget | readonly EditorExternalWatchTarget[] | undefined
 ): {
   handleFsChanged: (payload: FsChangedPayload, runtimeEnvironmentId?: string | null) => void
   dispose: () => void
@@ -58,19 +59,29 @@ export function buildEditorExternalWatchEventHandler(
     payload: FsChangedPayload,
     runtimeEnvironmentId: string | null = null
   ): void => {
-    const target = findTarget(payload.worktreePath, runtimeEnvironmentId)
-    if (!target) {
+    const found = findTargets(payload.worktreePath, runtimeEnvironmentId)
+    const targets = found === undefined ? [] : Array.isArray(found) ? found : [found]
+    if (targets.length === 0) {
       return
     }
     // Why: this app-level hook owns watcher subscriptions; other consumers listen here so they don't fight over watch/unwatch ownership.
+    // Path-scoped consumers need the event once, not once per workspace sharing the path.
     if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(
         new CustomEvent<WorktreeFileChangeEventDetail>(ORCA_WORKTREE_FILE_CHANGE_EVENT, {
-          detail: { payload, runtimeEnvironmentId: target.runtimeEnvironmentId }
+          detail: { payload, runtimeEnvironmentId: targets[0].runtimeEnvironmentId }
         })
       )
     }
+    for (const target of targets) {
+      reconcileTargetChanges(payload, target)
+    }
+  }
 
+  const reconcileTargetChanges = (
+    payload: FsChangedPayload,
+    target: EditorExternalWatchTarget
+  ): void => {
     // Why: one batch index keeps local WSL alias normalization out of event×tab loops.
     const openFilesAtStart = useAppStore.getState().openFiles
     const batchPaths = indexEditorExternalWatchBatchPaths(payload, openFilesAtStart, {
