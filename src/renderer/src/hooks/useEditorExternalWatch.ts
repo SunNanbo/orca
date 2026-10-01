@@ -26,6 +26,17 @@ function warnExternalWatchFailure(target: EditorExternalWatchTarget, err: unknow
   })
 }
 
+// Why: mirrors main's per-root listener key (connection + normalized path) for targets routed through fs:watchWorktree.
+function getWatchWorktreeRootKey(target: EditorExternalWatchTarget): string {
+  return `${target.connectionId ?? 'local'}::${normalizeRuntimePathForComparison(target.worktreePath)}`
+}
+
+function getWatchWorktreeRootKeys(targets: EditorExternalWatchTarget[]): Set<string> {
+  return new Set(
+    targets.filter((target) => !target.runtimeEnvironmentId).map(getWatchWorktreeRootKey)
+  )
+}
+
 /** Keeps editor filesystem subscriptions alive beyond any individual editor surface. */
 export function useEditorExternalWatch(): void {
   const { targets, targetsKey } = useAppStore(selectEditorExternalWatchTargets)
@@ -50,6 +61,11 @@ export function useEditorExternalWatch(): void {
       (target) => !previousKeys.has(getEditorExternalWatchTargetKey(target))
     )
 
+    // Why: main tracks one listener per path per window, so a path shared by several workspaces is subscribed by the first and released by the last.
+    const previousWatchRoots = getWatchWorktreeRootKeys(previousTargets)
+    const nextWatchRoots = getWatchWorktreeRootKeys(nextTargets)
+    const releasedRoots = new Set<string>()
+    const subscribedRoots = new Set<string>()
     for (const target of removed) {
       const key = getEditorExternalWatchTargetKey(target)
       const remoteUnsubscribe = remoteWatchUnsubsRef.current.get(key)
@@ -57,6 +73,11 @@ export function useEditorExternalWatch(): void {
         remoteUnsubscribe()
         remoteWatchUnsubsRef.current.delete(key)
       } else {
+        const rootKey = getWatchWorktreeRootKey(target)
+        if (nextWatchRoots.has(rootKey) || releasedRoots.has(rootKey)) {
+          continue
+        }
+        releasedRoots.add(rootKey)
         void window.api.fs.unwatchWorktree({
           worktreePath: target.worktreePath,
           connectionId: target.connectionId
@@ -68,6 +89,11 @@ export function useEditorExternalWatch(): void {
         subscribeRuntimeTarget(target, remoteWatchUnsubsRef.current, fsChangedHandlerRef)
         continue
       }
+      const rootKey = getWatchWorktreeRootKey(target)
+      if (previousWatchRoots.has(rootKey) || subscribedRoots.has(rootKey)) {
+        continue
+      }
+      subscribedRoots.add(rootKey)
       void window.api.fs
         .watchWorktree({
           worktreePath: target.worktreePath,
@@ -87,7 +113,7 @@ export function useEditorExternalWatch(): void {
     const remoteWatchUnsubs = remoteWatchUnsubsRef.current
     const { handleFsChanged, dispose } = buildEditorExternalWatchEventHandler(
       (worktreePath, runtimeEnvironmentId) =>
-        targetsRef.current.find(
+        targetsRef.current.filter(
           (target) =>
             normalizeRuntimePathForComparison(target.worktreePath) ===
               normalizeRuntimePathForComparison(worktreePath) &&
@@ -101,12 +127,18 @@ export function useEditorExternalWatch(): void {
       unsubscribe()
       dispose()
       fsChangedHandlerRef.current = null
+      const releasedRoots = new Set<string>()
       for (const target of targetsRef.current) {
         const key = getEditorExternalWatchTargetKey(target)
         const remoteUnsubscribe = remoteWatchUnsubs.get(key)
         if (remoteUnsubscribe) {
           remoteUnsubscribe()
         } else {
+          const rootKey = getWatchWorktreeRootKey(target)
+          if (releasedRoots.has(rootKey)) {
+            continue
+          }
+          releasedRoots.add(rootKey)
           void window.api.fs.unwatchWorktree({
             worktreePath: target.worktreePath,
             connectionId: target.connectionId
