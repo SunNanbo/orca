@@ -134,6 +134,53 @@ describe('useEditorExternalWatch subscriptions', () => {
     expect(subscriptionState.disposeEventHandler).toHaveBeenCalledTimes(1)
   })
 
+  it('keeps one local watch per folder path while any workspace on it is still watched', async () => {
+    const sharedFolderTarget = (worktreeId: string): TestWatchTarget => ({
+      worktreeId,
+      worktreePath: 'G:\\Vault',
+      connectionId: undefined,
+      runtimeEnvironmentId: null
+    })
+    subscriptionState.snapshot = {
+      targets: [sharedFolderTarget('wt-a'), sharedFolderTarget('wt-b')],
+      targetsKey: 'both-workspaces'
+    }
+    await act(async () => root.render(createElement(WatchProbe)))
+    expect(watchWorktree).toHaveBeenCalledTimes(1)
+
+    subscriptionState.snapshot = {
+      targets: [sharedFolderTarget('wt-a')],
+      targetsKey: 'workspace-a-only'
+    }
+    await act(async () => root.render(createElement(WatchProbe)))
+    expect(unwatchWorktree).not.toHaveBeenCalled()
+
+    subscriptionState.snapshot = { targets: [], targetsKey: 'no-workspaces' }
+    await act(async () => root.render(createElement(WatchProbe)))
+    expect(unwatchWorktree).toHaveBeenCalledTimes(1)
+    expect(unwatchWorktree).toHaveBeenCalledWith({
+      worktreePath: 'G:\\Vault',
+      connectionId: undefined
+    })
+  })
+
+  it('releases a shared folder watch once on unmount', async () => {
+    subscriptionState.snapshot = {
+      targets: ['wt-a', 'wt-b'].map((worktreeId) => ({
+        worktreeId,
+        worktreePath: '/vault',
+        connectionId: undefined,
+        runtimeEnvironmentId: null
+      })),
+      targetsKey: 'both-workspaces'
+    }
+    await act(async () => root.render(createElement(WatchProbe)))
+    await act(async () => root.unmount())
+
+    expect(watchWorktree).toHaveBeenCalledTimes(1)
+    expect(unwatchWorktree).toHaveBeenCalledTimes(1)
+  })
+
   it('disposes a runtime subscription that resolves after unmount', async () => {
     const pending = deferredRuntimeSubscription()
     const unsubscribeRuntime = vi.fn()
