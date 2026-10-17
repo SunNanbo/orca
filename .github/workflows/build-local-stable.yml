@@ -1,0 +1,80 @@
+name: Build local/stable (Windows)
+
+# Fork-only: packages the unpacked Windows app from local/stable and uploads it as an artifact.
+# Not for upstream: pr.yml only runs on pull_request, which a fork push never triggers.
+on:
+  push:
+    branches:
+      - local/stable
+  workflow_dispatch:
+
+concurrency:
+  group: build-local-stable
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  package_windows:
+    name: package (windows)
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/install-node-dependencies
+        id: deps
+        with:
+          native-runtime: node
+          persist-native-cache: 'false'
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            mobile/pnpm-lock.yaml
+
+      - uses: ./.github/actions/install-mobile-dependencies
+
+      - name: Ensure the Rust toolchain for the Windows CLI launcher
+        shell: pwsh
+        run: |
+          if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+            rustup toolchain install stable --profile minimal
+            rustup default stable
+          }
+          cargo --version
+
+      - name: Build the Windows agent hook
+        run: node config/scripts/build-windows-agent-hook.mjs
+
+      - name: Build the Windows CLI launcher
+        run: node config/scripts/build-windows-cli-launcher.mjs
+
+      - name: Build package inputs
+        env:
+          ORCA_CI_MAIN_SOURCEMAPS: '0'
+        run: pnpm run build:release:parallel
+
+      - name: Prepare Electron native runtime
+        uses: ./.github/actions/prepare-native-runtime
+        with:
+          native-runtime: electron
+          node-version: ${{ steps.deps.outputs.node-version }}
+
+      - name: Package unpacked app
+        env:
+          ORCA_REUSE_PREPARED_NATIVE_RUNTIME: '1'
+        run: pnpm exec electron-builder --config config/electron-builder.config.cjs --dir
+
+      - name: Smoke packaged CLI
+        run: node config/scripts/smoke-packaged-cli.mjs --app-dir=dist/win-unpacked
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: orca-local-stable-${{ github.sha }}-windows-unpacked
+          path: dist/win-unpacked/
+          retention-days: 14
