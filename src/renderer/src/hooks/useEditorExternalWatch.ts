@@ -20,6 +20,9 @@ import {
   type HeldWatchRoots
 } from '../components/editor/external-changes/watching/editor-external-watch-local-roots'
 import { SymlinkedTabFolderWatches } from '../components/editor/external-changes/watching/editor-external-watch-symlink-folders'
+import { createEditorExternalWatchPoller } from '../components/editor/external-changes/watching/editor-external-watch-poll'
+import { getLastSelfWriteAt } from '@/components/editor/external-changes/editor-self-write-registry'
+import { editorTabFileAccess } from '@/lib/files/access/local-file-access'
 import { selectLocalTabFoldersKey } from '../components/editor/external-changes/watching/editor-external-watch-tab-folders-key'
 
 type FsChangedHandler = (
@@ -147,7 +150,21 @@ export function useEditorExternalWatch(): void {
           : [])
       ]
     )
+    // Why: watchers on cloud/network drives can miss in-place writes; see editor-external-watch-poll.
+    const poller = createEditorExternalWatchPoller({
+      getTargets: () => targetsRef.current,
+      getOpenFiles: () => useAppStore.getState().openFiles,
+      statFile: (file) =>
+        window.api.fs.stat({
+          filePath: file.filePath,
+          access: editorTabFileAccess(useAppStore.getState(), file)
+        }),
+      getLastSelfWriteAt: (absolutePath) => getLastSelfWriteAt(absolutePath, null),
+      handleFsChanged: (payload) => handleFsChanged(payload, null)
+    })
+    const stopPolling = poller.start()
     const unsubscribe = window.api.fs.onFsChanged((payload) => {
+      poller.noteWatcherPayload(payload)
       if (payload.resync && !payload.connectionId) {
         // Why every local resync: main sends one after a deferred install lands, whoever holds that root.
         void refreshDeferredWatchRoot(
@@ -162,6 +179,7 @@ export function useEditorExternalWatch(): void {
     symlinkedFolders.routeHandOversTo((payload) => handleFsChanged(payload, null))
 
     return () => {
+      stopPolling()
       unsubscribe()
       dispose()
       fsChangedHandlerRef.current = null
