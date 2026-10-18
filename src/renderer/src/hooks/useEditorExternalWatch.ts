@@ -23,6 +23,9 @@ type FsChangedHandler = (
   runtimeEnvironmentId?: string | null,
   onlyTarget?: EditorExternalWatchTarget
 ) => void
+import { createEditorExternalWatchPoller } from './editor-external-watch-poll'
+import { getLastSelfWriteAt } from '@/components/editor/editor-self-write-registry'
+import { editorTabFileAccess } from '@/lib/local-file-access'
 
 function warnExternalWatchFailure(target: EditorExternalWatchTarget, err: unknown): void {
   console.warn('[filesystem-watch] failed to watch worktree', {
@@ -116,10 +119,27 @@ export function useEditorExternalWatch(): void {
             (runtimeEnvironmentId !== null || target.connectionId === connectionId)
         )
     )
-    const unsubscribe = window.api.fs.onFsChanged((payload) => handleFsChanged(payload, null))
+    // Why: watchers on cloud/network drives can miss in-place writes; see editor-external-watch-poll.
+    const poller = createEditorExternalWatchPoller({
+      getTargets: () => targetsRef.current,
+      getOpenFiles: () => useAppStore.getState().openFiles,
+      statFile: (file) =>
+        window.api.fs.stat({
+          filePath: file.filePath,
+          access: editorTabFileAccess(useAppStore.getState(), file)
+        }),
+      getLastSelfWriteAt: (absolutePath) => getLastSelfWriteAt(absolutePath, null),
+      handleFsChanged: (payload) => handleFsChanged(payload, null)
+    })
+    const stopPolling = poller.start()
+    const unsubscribe = window.api.fs.onFsChanged((payload) => {
+      poller.noteWatcherPayload(payload)
+      handleFsChanged(payload, null)
+    })
     fsChangedHandlerRef.current = handleFsChanged
 
     return () => {
+      stopPolling()
       unsubscribe()
       dispose()
       fsChangedHandlerRef.current = null
