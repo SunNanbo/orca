@@ -29,6 +29,8 @@ type SelfWriteStamp = RecentSelfWrite & {
 }
 
 const stamps = new Map<string, SelfWriteStamp>()
+// Why: the stamp TTL is far shorter than a poll interval, so the poll backstop needs a longer-lived "we wrote this" signal to tell our own save from an external one.
+const lastSelfWriteAt = new Map<string, number>()
 let expiryTimer: ReturnType<typeof setTimeout> | null = null
 let scheduledExpiryAt = Infinity
 
@@ -107,6 +109,22 @@ export function recordSelfWrite(
   })
   enforceSelfWriteStampLimit()
   scheduleExpiredSelfWriteCleanup()
+  lastSelfWriteAt.delete(key)
+  lastSelfWriteAt.set(key, now)
+  while (lastSelfWriteAt.size > SELF_WRITE_MAX_STAMPS) {
+    const oldest = lastSelfWriteAt.keys().next().value
+    if (oldest === undefined) {
+      break
+    }
+    lastSelfWriteAt.delete(oldest)
+  }
+}
+
+export function getLastSelfWriteAt(
+  absolutePath: string,
+  runtimeEnvironmentId?: string | null
+): number | null {
+  return lastSelfWriteAt.get(selfWriteKey(absolutePath, runtimeEnvironmentId)) ?? null
 }
 
 export function clearSelfWrite(absolutePath: string, runtimeEnvironmentId?: string | null): void {
@@ -145,6 +163,7 @@ export function hasRecentSelfWrite(
 export function __clearSelfWriteRegistryForTests(): void {
   clearExpiryTimer()
   stamps.clear()
+  lastSelfWriteAt.clear()
 }
 
 export function __getSelfWriteRegistrySizeForTests(): number {
