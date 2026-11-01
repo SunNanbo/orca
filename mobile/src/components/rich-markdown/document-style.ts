@@ -125,12 +125,20 @@ export function richMarkdownEditorStyle(): string {
       background: color-mix(in srgb, var(--foreground) 2%, transparent);
     }
     table {
-      width: 100%;
+      display: block;
+      width: max-content;
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       margin: 1em 0;
       border-collapse: collapse;
       font-size: 0.95em;
     }
     th, td {
+      min-width: 96px;
+      max-width: 280px;
+      overflow-wrap: break-word;
+      word-break: normal;
       padding: 8px 14px;
       border: 1px solid var(--border);
       text-align: left;
