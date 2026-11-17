@@ -1,6 +1,6 @@
-import type { OpenFile } from '@/store/slices/editor'
-import { normalizeRuntimePathForComparison } from '../../../shared/cross-platform-path'
-import type { FsChangedPayload } from '../../../shared/filesystem-entry-types'
+import type { OpenFile } from '@/store/slices/editor/types/open-file'
+import { normalizeRuntimePathForComparison } from '../../../../../../shared/file-access/cross-platform-path'
+import type { FsChangedPayload } from '../../../../../../shared/file-watch/filesystem-change-event'
 import type { EditorExternalWatchTarget } from './editor-external-watch-targets'
 
 // Why: some filesystems (Google Drive for desktop's virtual drive, other cloud/network mounts) deliver create/delete notifications but none for in-place writes, so an open tab never learns that an agent rewrote its file. Polling mtime/size of open local tabs is the backstop; a detected change is replayed through the normal fs:changed handler so reload, dirty-conflict and self-write rules stay in one place.
