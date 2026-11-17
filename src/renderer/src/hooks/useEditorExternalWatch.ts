@@ -28,9 +28,9 @@ type FsChangedHandler = (
   runtimeEnvironmentId?: string | null,
   onlyTarget?: EditorExternalWatchTarget
 ) => void
-import { createEditorExternalWatchPoller } from './editor-external-watch-poll'
-import { getLastSelfWriteAt } from '@/components/editor/editor-self-write-registry'
-import { editorTabFileAccess } from '@/lib/local-file-access'
+import { createEditorExternalWatchPoller } from '../components/editor/external-changes/watching/editor-external-watch-poll'
+import { getLastSelfWriteAt } from '@/components/editor/external-changes/editor-self-write-registry'
+import { editorTabFileAccess } from '@/lib/files/access/local-file-access'
 
 function warnExternalWatchFailure(target: EditorExternalWatchTarget, err: unknown): void {
   console.warn('[filesystem-watch] failed to watch worktree', {
