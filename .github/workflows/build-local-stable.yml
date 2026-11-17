@@ -48,10 +48,10 @@ jobs:
           cargo --version
 
       - name: Build the Windows agent hook
-        run: node config/scripts/build-windows-agent-hook.mjs
+        run: node config/scripts/native-build/windows/build-windows-agent-hook.mjs
 
       - name: Build the Windows CLI launcher
-        run: node config/scripts/build-windows-cli-launcher.mjs
+        run: node config/scripts/native-build/windows/build-windows-cli-launcher.mjs
 
       - name: Build package inputs
         env:
@@ -70,7 +70,7 @@ jobs:
         run: pnpm exec electron-builder --config config/electron-builder.config.cjs --dir
 
       - name: Smoke packaged CLI
-        run: node config/scripts/smoke-packaged-cli.mjs --app-dir=dist/win-unpacked
+        run: node config/scripts/desktop-distribution/runtime-verification/smoke-packaged-cli.mjs --app-dir=dist/win-unpacked
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
