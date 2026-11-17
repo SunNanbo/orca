@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { OpenFile } from '@/store/slices/editor'
-import type { FsChangedPayload } from '../../../shared/filesystem-entry-types'
+import type { OpenFile } from '@/store/slices/editor/types/open-file'
+import type { FsChangedPayload } from '../../../../../../shared/file-watch/filesystem-change-event'
 import type { EditorExternalWatchTarget } from './editor-external-watch-targets'
 import {
   EDITOR_EXTERNAL_WATCH_POLL_INTERVAL_MS,
